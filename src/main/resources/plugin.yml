@@ -1,0 +1,5 @@
+name: HealthNotifier
+main: club.aurorapvp.HealthNotifier
+api: ["1.0.14"]
+version: '1.0.0'
+author: Villagers654
