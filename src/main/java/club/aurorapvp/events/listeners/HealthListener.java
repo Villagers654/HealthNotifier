@@ -78,7 +78,9 @@ public class HealthListener implements Listener {
       Player added = Server.getInstance().getPlayer(pk.uuid).orElse(null);
 
       if (added != null && added.isOnline() && viewer != null && viewer.isOnline()) {
-        sendUpdateToViewer(added, viewer);
+        Server.getInstance()
+                .getScheduler()
+                .scheduleDelayedTask(plugin, new UpdateTask(added), 1);
       }
     }
   }
