@@ -1,7 +1,6 @@
 package club.aurorapvp;
 
 import club.aurorapvp.events.Events;
-import cn.nukkit.Server;
 import cn.nukkit.plugin.Plugin;
 import cn.nukkit.plugin.PluginBase;
 

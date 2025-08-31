@@ -8,7 +8,8 @@ import cn.nukkit.event.Listener;
 import cn.nukkit.event.entity.EntityDamageEvent;
 import cn.nukkit.event.entity.EntityPotionEffectEvent;
 import cn.nukkit.event.entity.EntityRegainHealthEvent;
-import cn.nukkit.event.player.PlayerRespawnEvent;
+import cn.nukkit.event.server.DataPacketSendEvent;
+import cn.nukkit.network.protocol.AddPlayerPacket;
 import cn.nukkit.network.protocol.UpdateAttributesPacket;
 import cn.nukkit.plugin.Plugin;
 import cn.nukkit.scheduler.Task;
@@ -26,6 +27,7 @@ public class HealthListener implements Listener {
   @EventHandler
   public void onDamage(EntityDamageEvent event) {
     Entity entity = event.getEntity();
+
     if (entity instanceof Player && !event.isCancelled()) {
       Server.getInstance()
           .getScheduler()
@@ -36,6 +38,7 @@ public class HealthListener implements Listener {
   @EventHandler
   public void onRegain(EntityRegainHealthEvent event) {
     Entity entity = event.getEntity();
+
     if (entity instanceof Player && !event.isCancelled()) {
       Server.getInstance()
           .getScheduler()
@@ -46,13 +49,16 @@ public class HealthListener implements Listener {
   @EventHandler
   public void onPotionEffect(EntityPotionEffectEvent event) {
     Entity entity = event.getEntity();
+
     if (entity instanceof Player) {
       Effect effect;
+
       if (event.getAction() == EntityPotionEffectEvent.Action.REMOVED) {
         effect = event.getOldEffect();
       } else {
         effect = event.getNewEffect();
       }
+
       if (effect != null && effect.getId() == Effect.ABSORPTION && !event.isCancelled()) {
         Server.getInstance()
             .getScheduler()
@@ -62,9 +68,36 @@ public class HealthListener implements Listener {
   }
 
   @EventHandler
-  public void onRespawn(PlayerRespawnEvent event) {
-    Player player = event.getPlayer();
-    Server.getInstance().getScheduler().scheduleDelayedTask(plugin, new UpdateTask(player), 1);
+  public void onDataPacketSend(DataPacketSendEvent event) {
+    if (event.isCancelled()) {
+      return;
+    }
+
+    if (event.getPacket() instanceof AddPlayerPacket pk) {
+      Player viewer = event.getPlayer();
+      Player added = Server.getInstance().getPlayer(pk.uuid).orElse(null);
+
+      if (added != null && added.isOnline() && viewer != null && viewer.isOnline()) {
+        sendUpdateToViewer(added, viewer);
+      }
+    }
+  }
+
+  private static void sendUpdateToViewer(Player target, Player viewer) {
+    UpdateAttributesPacket pk = new UpdateAttributesPacket();
+    pk.entityId = target.getId();
+
+    Attribute healthAttr = Attribute.getAttribute(Attribute.MAX_HEALTH);
+    healthAttr.setMaxValue(target.getMaxHealth());
+    healthAttr.setValue(target.getHealth());
+
+    Attribute absorptionAttr = Attribute.getAttribute(Attribute.ABSORPTION);
+    absorptionAttr.setMaxValue(1024f);
+    absorptionAttr.setValue(target.getAbsorption());
+
+    pk.entries = new Attribute[] {healthAttr, absorptionAttr};
+
+    viewer.dataPacket(pk);
   }
 
   private static class UpdateTask extends Task {
@@ -76,23 +109,12 @@ public class HealthListener implements Listener {
 
     @Override
     public void onRun(int currentTick) {
-      if (!player.isOnline()) return;
+      if (!player.isOnline()) {
+        return;
+      }
 
-      UpdateAttributesPacket pk = new UpdateAttributesPacket();
-      pk.entityId = player.getId();
-
-      Attribute healthAttr = Attribute.getAttribute(Attribute.MAX_HEALTH);
-      healthAttr.setMaxValue(player.getMaxHealth());
-      healthAttr.setValue(player.getHealth());
-
-      Attribute absorptionAttr = Attribute.getAttribute(Attribute.ABSORPTION);
-      absorptionAttr.setMaxValue(1024f);
-      absorptionAttr.setValue(player.getAbsorption());
-
-      pk.entries = new Attribute[] {healthAttr, absorptionAttr};
-
-      for (Player p : Server.getInstance().getOnlinePlayers().values()) {
-        p.dataPacket(pk);
+      for (Player p : player.getViewers().values()) {
+        sendUpdateToViewer(player, p);
       }
     }
   }
